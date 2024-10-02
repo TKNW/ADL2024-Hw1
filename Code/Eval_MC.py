@@ -12,7 +12,6 @@ from torch.utils.data import DataLoader
 from transformers import (
     AutoModelForMultipleChoice,
     AutoTokenizer,
-    BertTokenizerFast,
     PreTrainedTokenizerBase,
 )
 from transformers.utils import PaddingStrategy
@@ -20,22 +19,10 @@ from transformers.utils import PaddingStrategy
 def parse_args():
     parser = argparse.ArgumentParser(description="Use a transformers model on a multiple choice task")
     parser.add_argument(
-        "--dataset_config_name",
-        type=str,
-        default=None,
-        help="The configuration name of the dataset to use (via the datasets library).",
-    )
-    parser.add_argument(
         "--test_file", type=str, required=True, help="A csv or a json file containing the test data."
     )
     parser.add_argument(
-        "--context_file", type=str, default=None, help="A csv or a json file containing the context data."
-    )
-    parser.add_argument(
-        "--config_name",
-        type=str,
-        default=None,
-        help="Pretrained config name or path if not the same as model_name",
+        "--context_file", type=str, required=True, help="A csv or a json file containing the context data."
     )
     parser.add_argument(
         "--tokenizer_name",
@@ -57,6 +44,13 @@ def parse_args():
             " sequences shorter will be padded if `--pad_to_max_length` is passed."
         ),
     )
+    parser.add_argument(
+        "--model_name_or_path",
+        type=str,
+        help="Path to pretrained model or model identifier from huggingface.co/models.",
+        required=True,
+    )
+    parser.add_argument("--output_dir", type=str, default="./", help="Where to store the final prediction.")
     args = parser.parse_args()
 
     return args
@@ -117,13 +111,12 @@ class DataCollatorForMultipleChoice:
 def main():
     args = parse_args()
     # read model
-    # 這裡到時要調參數要注意
     accelerator = Accelerator(gradient_accumulation_steps=2)
     if args.tokenizer_name:
-        tokenizer = BertTokenizerFast.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             args.tokenizer_name, use_fast=not args.use_slow_tokenizer
         )
-    model = AutoModelForMultipleChoice.from_pretrained(".\\Output_MC")
+    model = AutoModelForMultipleChoice.from_pretrained(args.model_name_or_path)
 
     device = accelerator.device
     model.to(device)
@@ -195,11 +188,10 @@ def main():
         examples["context"] = data_context[examples["paragraphs"][predictions[idx]]]
         return examples
     predictions_final = raw_datasets.map(postprocess_function, with_indices=True)
-    print(type(predictions_final["train"]))
     predictions_final["train"].to_json("test_QA.json")  
-    # 使用 json.dump 寫入文件，並設定 ensure_ascii=False
+    # 使用 json.dump 寫入文件，並設定 ensure_ascii=False by ChatGPT
     data_list = [item for item in predictions_final["train"]]
-    with open('test_QA_Uni.json', 'w', encoding='utf-8') as f:
+    with open(f'{args.output_dir}test_QA_Uni.json', 'w', encoding='utf-8') as f:
         json.dump(data_list, f, ensure_ascii=False, indent=4)
 
 

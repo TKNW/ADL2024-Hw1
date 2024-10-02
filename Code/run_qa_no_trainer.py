@@ -26,6 +26,7 @@ import os
 import random
 from pathlib import Path
 
+import pandas as pd
 import datasets
 import evaluate
 import numpy as np
@@ -47,7 +48,6 @@ from transformers import (
     AutoConfig,
     AutoModelForQuestionAnswering,
     AutoTokenizer,
-    BertTokenizerFast,
     DataCollatorWithPadding,
     EvalPrediction,
     SchedulerType,
@@ -440,11 +440,11 @@ def main():
         logger.warning("You are instantiating a new config instance from scratch.")
 
     if args.tokenizer_name:
-        tokenizer = BertTokenizerFast.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             args.tokenizer_name, use_fast=True, trust_remote_code=args.trust_remote_code
         )
     elif args.model_name_or_path:
-        tokenizer = BertTokenizerFast.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             args.model_name_or_path, use_fast=True, trust_remote_code=args.trust_remote_code
         )
     else:
@@ -746,7 +746,7 @@ def main():
         else:
             formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
-        # 把dict轉成list
+        # 把dict轉成list by ChatGPT
         for ref in references:
             if isinstance(ref['answers'], dict):
                 ref['answers']['text'] = [ref['answers']['text']]
@@ -893,6 +893,9 @@ def main():
 
     # update the progress_bar if load from checkpoint
     progress_bar.update(completed_steps)
+    # 紀錄實驗數據，eval_loss目前還沒辦法算，因為沒有valid資料沒有保留位置資訊
+    eval_acc = []
+    train_loss = []
 
     for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
@@ -927,6 +930,69 @@ def main():
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
+                    model.eval()
+                    all_start_logits = []
+                    all_end_logits = []
+                    total_tloss = 0
+                    for tstep, tbatch in tqdm(enumerate(train_dataloader)):
+                        with torch.no_grad():
+                            t_outputs = model(**tbatch)
+                            start_logits = t_outputs.start_logits
+                            end_logits = t_outputs.end_logits
+                            tloss = t_outputs.loss
+                            if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
+                                start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
+                                end_logits = accelerator.pad_across_processes(end_logits, dim=1, pad_index=-100)
+                            all_start_logits.append(accelerator.gather_for_metrics(start_logits).cpu().numpy())
+                            all_end_logits.append(accelerator.gather_for_metrics(end_logits).cpu().numpy())
+                            total_tloss += tloss.item()
+                    max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
+                    # concatenate the numpy array
+                    start_logits_concat = create_and_fill_np_array(all_start_logits, train_dataset, max_len)
+                    end_logits_concat = create_and_fill_np_array(all_end_logits, train_dataset, max_len)
+
+                    # delete the list of numpy arrays
+                    del all_start_logits
+                    del all_end_logits
+
+                    outputs_numpy = (start_logits_concat, end_logits_concat)
+                    # prediction = post_processing_function(, eval_dataset, outputs_numpy)
+                    # eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
+                    avg_tloss = total_tloss / len(train_dataloader)
+
+                    accelerator.print(f"train loss: {avg_tloss}")
+                    #accelerator.print(f"train acc: {eval_metric}")
+
+                    train_loss.append(avg_tloss)
+
+                    all_start_logits = []
+                    all_end_logits = []
+                    for estep, ebatch in tqdm(enumerate(eval_dataloader)):
+                        with torch.no_grad():
+                            e_outputs = model(**ebatch)
+                            start_logits = e_outputs.start_logits
+                            end_logits = e_outputs.end_logits
+                            if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
+                                start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
+                                end_logits = accelerator.pad_across_processes(end_logits, dim=1, pad_index=-100)
+                            all_start_logits.append(accelerator.gather_for_metrics(start_logits).cpu().numpy())
+                            all_end_logits.append(accelerator.gather_for_metrics(end_logits).cpu().numpy())
+                    max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
+                    # concatenate the numpy array
+                    start_logits_concat = create_and_fill_np_array(all_start_logits, eval_dataset, max_len)
+                    end_logits_concat = create_and_fill_np_array(all_end_logits, eval_dataset, max_len)
+
+                    # delete the list of numpy arrays
+                    del all_start_logits
+                    del all_end_logits
+
+                    outputs_numpy = (start_logits_concat, end_logits_concat)
+                    prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
+                    eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
+
+                    accelerator.print(f"eval acc: {eval_metric}")
+
+                    eval_acc.append(eval_metric['exact_match'])
 
             if completed_steps >= args.max_train_steps:
                 break
@@ -1045,7 +1111,7 @@ def main():
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(
-            args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+            args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save, safe_serialization=False
         )
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
@@ -1059,6 +1125,11 @@ def main():
                 )
             logger.info(json.dumps(eval_metric, indent=4))
             save_prefixed_metrics(eval_metric, args.output_dir)
+            df = pd.DataFrame({
+                'Train_loss': train_loss,
+                'Eval_accuracy': eval_acc,
+            })
+            df.to_csv(f"{args.output_dir}\\accloss_per{args.checkpointing_steps}step.csv", index=False)
 
 
 if __name__ == "__main__":

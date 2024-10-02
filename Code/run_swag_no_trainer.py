@@ -53,7 +53,6 @@ from transformers import (
     AutoModel,
     AutoModelForMultipleChoice,
     AutoTokenizer,
-    BertTokenizerFast,
     PreTrainedTokenizerBase,
     SchedulerType,
     default_data_collator,
@@ -423,11 +422,11 @@ def main():
         logger.warning("You are instantiating a new config instance from scratch.")
 
     if args.tokenizer_name:
-        tokenizer = BertTokenizerFast.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             args.tokenizer_name, use_fast=not args.use_slow_tokenizer, trust_remote_code=args.trust_remote_code
         )
     elif args.model_name_or_path:
-        tokenizer = BertTokenizerFast.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             args.model_name_or_path, use_fast=not args.use_slow_tokenizer, trust_remote_code=args.trust_remote_code
         )
     else:
@@ -713,6 +712,7 @@ def main():
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
+        
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(
             args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save

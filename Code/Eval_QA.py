@@ -5,40 +5,20 @@ import numpy as np
 import torch
 from accelerate import Accelerator
 from datasets import load_dataset
-from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
 from utils_qa import postprocess_qa_predictions
 
 from transformers import (
-    CONFIG_MAPPING,
-    MODEL_MAPPING,
-    AutoConfig,
     AutoModelForQuestionAnswering,
     AutoTokenizer,
-    BertTokenizerFast,
     DataCollatorWithPadding,
-    EvalPrediction,
-    SchedulerType,
     default_data_collator
 )
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Use a transformers model on a question answering task")
     parser.add_argument(
-        "--dataset_config_name",
-        type=str,
-        default=None,
-        help="The configuration name of the dataset to use (via the datasets library).",
-    )
-    parser.add_argument(
         "--test_file", type=str, required=True, help="A csv or a json file containing the test data."
-    )
-    parser.add_argument(
-        "--config_name",
-        type=str,
-        default=None,
-        help="Pretrained config name or path if not the same as model_name",
     )
     parser.add_argument(
         "--tokenizer_name",
@@ -113,6 +93,18 @@ def parse_args():
         default=20,
         help="The total number of n-best predictions to generate when looking for an answer.",
     )
+    parser.add_argument(
+        "--model_name_or_path",
+        type=str,
+        help="Path to pretrained model or model identifier from huggingface.co/models.",
+        required=True,
+    )
+    parser.add_argument(
+        "--output_name",
+        type=str,
+        help="File name of the prediction.",
+        required=True,
+    )
     args = parser.parse_args()
 
     return args
@@ -120,13 +112,12 @@ def parse_args():
 
 def main():
     args = parse_args()
-    # 這裡到時要調參數要注意
-    accelerator = Accelerator(gradient_accumulation_steps=1)
+    accelerator = Accelerator(gradient_accumulation_steps=2)
     if args.tokenizer_name:
-        tokenizer = BertTokenizerFast.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             args.tokenizer_name, use_fast=not args.use_slow_tokenizer
         )
-    model = AutoModelForQuestionAnswering.from_pretrained(".\\Output_QA")
+    model = AutoModelForQuestionAnswering.from_pretrained(args.model_name_or_path)
 
     device = accelerator.device
     model.to(device)
@@ -138,7 +129,6 @@ def main():
     max_seq_length = min(args.max_seq_length, tokenizer.model_max_length)
     question_column_name = "question"
     context_column_name = "context"
-    answer_column_name = "answer"
     pad_on_right = tokenizer.padding_side == "right"
 
     def prepare_test_features(examples):
@@ -303,8 +293,7 @@ def main():
     outputs_numpy = (start_logits_concat, end_logits_concat)
     prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
     df = pd.DataFrame.from_dict(data=prediction, orient='index')
-    print(df)
-    df.to_csv('output0923-3.csv', header=['answer'], index_label='id', index=True)
+    df.to_csv(args.output_name, header=['answer'], index_label='id', index=True)
 
     
 
