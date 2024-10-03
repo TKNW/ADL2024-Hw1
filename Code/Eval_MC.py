@@ -187,11 +187,10 @@ def main():
     def postprocess_function(examples, idx):
         examples["context"] = data_context[examples["paragraphs"][predictions[idx]]]
         return examples
-    predictions_final = raw_datasets.map(postprocess_function, with_indices=True)
-    predictions_final["train"].to_json("test_QA.json")  
+    predictions_final = raw_datasets.map(postprocess_function, with_indices=True) 
     # 使用 json.dump 寫入文件，並設定 ensure_ascii=False by ChatGPT
     data_list = [item for item in predictions_final["train"]]
-    with open(f'{args.output_dir}test_QA_Uni.json', 'w', encoding='utf-8') as f:
+    with open(f'{args.output_dir}test_QA_Unicode.json', 'w', encoding='utf-8') as f:
         json.dump(data_list, f, ensure_ascii=False, indent=4)
 
 

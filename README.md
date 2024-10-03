@@ -14,18 +14,18 @@ python ./Code/run_swag_no_trainer.py --train_file ./Dataset/train.json --validat
 2. 預測使用Code/Eval_MC.py<br>
 參數：<br>
 ```
-python ./Code/Eval_MC.py --test_file ./Dataset/test.json --context_file ./Dataset/context.json --tokenizer_name hfl/chinese-bert-wwm --max_seq_length 512 --model_name_or_path ./Output_MC/ --output_dir ./Dataset/
+python ./Code/Eval_MC.py --test_file ./Dataset/test.json --context_file ./Dataset/context.json --tokenizer_name ./Output_MC --max_seq_length 512 --model_name_or_path ./Output_MC --output_dir ./Dataset/
 ```
 ### Step2. Question answering:
-3. 訓練使用Code/run_qa_no_trainer.py<br>
+1. 訓練使用Code/run_qa_no_trainer.py<br>
 參數：<br>
 ```
-python ./Code/run_qa_no_trainer.py --train_file ./Dataset/train.json --validation_file ./Dataset/valid.json --context_file ./Dataset/context.json --output_dir ./Output_QA --num_train_epoch 2 --max_seq_length 512 --model_name_or_path hfl/chinese-roberta-wwm-ext --tokenizer_name hfl/chinese-roberta-wwm-ext --per_device_train_batch_size 4 --per_device_eval_batch_size 4 --gradient_accumulation_steps 2 --learning_rate 3e-5
+python ./Code/run_qa_no_trainer.py --train_file ./Dataset/train.json --validation_file ./Dataset/valid.json --context_file ./Dataset/context.json --output_dir ./Output_QA --num_train_epoch 2 --max_seq_length 512 --model_name_or_path hfl/chinese-roberta-wwm-ext --tokenizer_name hfl/chinese-roberta-wwm-ext --per_device_train_batch_size 4 --per_device_eval_batch_size 4 --gradient_accumulation_steps 2 --learning_rate 3e-5 --lr_scheduler_type cosine
 ```
-4. 預測使用Code/Eval_QA.py<br>
+2. 預測使用Code/Eval_QA.py<br>
 參數：<br>
 ```
-python ./Code/Eval_QA.py --test_file ./Dataset/test_QA_Uni_final.json --tokenizer_name hfl/chinese-roberta-wwm-ext --model_name_or_path ./Output_QA/ --max_seq_length 512 --output_name ./prediction.csv
+python ./Code/Eval_QA.py --test_file ./Dataset/test_QA_Uni_final.json --tokenizer_name ./Output_QA --model_name_or_path ./Output_QA --max_seq_length 512 --output_name ./prediction.csv
 ```
 ## Draw plot:
 使用drawplot.ipynb
