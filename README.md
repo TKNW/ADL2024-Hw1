@@ -14,7 +14,7 @@ python ./Code/run_swag_no_trainer.py --train_file ./Dataset/train.json --validat
 2. 預測使用Code/Eval_MC.py<br>
 參數：<br>
 ```
-python ./Code/Eval_MC.py --test_file ./Dataset/test.json --context_file ./Dataset/context.json --tokenizer_name ./Output_MC --max_seq_length 512 --model_name_or_path ./Output_MC --output_dir ./Dataset/
+python ./Code/Eval_MC.py --test_file ./Dataset/test.json --context_file ./Dataset/context.json --tokenizer_name ./Output_MC --max_seq_length 512 --model_name_or_path ./Output_MC --output_dir ./Dataset
 ```
 ### Step2. Question answering:
 1. 訓練使用Code/run_qa_no_trainer.py<br>
@@ -25,7 +25,7 @@ python ./Code/run_qa_no_trainer.py --train_file ./Dataset/train.json --validatio
 2. 預測使用Code/Eval_QA.py<br>
 參數：<br>
 ```
-python ./Code/Eval_QA.py --test_file ./Dataset/test_QA_Uni_final.json --tokenizer_name ./Output_QA --model_name_or_path ./Output_QA --max_seq_length 512 --output_name ./prediction.csv
+python ./Code/Eval_QA.py --test_file ./Dataset/test_QA_Unicode.json --tokenizer_name ./Output_QA --model_name_or_path ./Output_QA --max_seq_length 512 --output_name ./prediction.csv
 ```
 ## Draw plot:
 使用drawplot.ipynb
